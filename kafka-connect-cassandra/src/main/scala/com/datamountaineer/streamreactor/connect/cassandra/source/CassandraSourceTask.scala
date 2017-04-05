@@ -88,7 +88,7 @@ class CassandraSourceTask extends SourceTask with StrictLogging {
       case Failure(f) => throw new ConnectException(s"Couldn't connect to Cassandra.", f)
     }
 
-    //Setup queues for readers to put records into
+    //Setup queues for git pull to put records into
     assigned.map(table => queues += table -> new LinkedBlockingQueue[SourceRecord](bufferSize.get))
     settings = CassandraSettings.configureSource(taskConfig.get)
 

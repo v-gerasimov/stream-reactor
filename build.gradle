@@ -75,17 +75,10 @@ allprojects {
         akkaVersion = "2.4.10"
         connectCLIVersion = "1.0"
 
-        // The following 4 need to align to compile against a particular version
-        confluentVersion = '3.2.0'
-        kafkaVersion = '0.10.2.0'
-        dataMountaineerCommonVersion = "0.7.4"
-        dataMountaineerTestKitVersion = "0.5"
-
-        // For 3.1.x versions use
-        // confluentVersion = '3.1.2'
-        // kafkaVersion = '0.10.1.1'
-        // dataMountaineerCommonVersion = "0.7.0"
-        // dataMountaineerTestKitVersion = "0.4"
+        confluentVersion = '3.1.2'
+        kafkaVersion = '0.10.1.1'
+        dataMountaineerCommonVersion = "0.7.4-cp3.1.2"
+        dataMountaineerTestKitVersion = "0.4"
 
         //release
         rootRelease = "${project.rootDir}/release/"
