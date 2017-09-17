@@ -18,47 +18,40 @@ package com.datamountaineer.streamreactor.connect.bloomberg
 
 import java.util
 
-import com.datamountaineer.streamreactor.connect.bloomberg.avro.AvroSchemaGenerator
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericRecord}
-import org.apache.avro.io.DecoderFactory
+import io.confluent.connect.avro.AvroData
+import org.apache.kafka.connect.data.{Schema, SchemaBuilder}
 import org.codehaus.jackson.JsonNode
 import org.scalatest.{Matchers, WordSpec}
 
 import scala.collection.JavaConverters._
 
-class AvroSchemaGeneratorTest extends WordSpec with Matchers {
+class SchemaGeneratorTest extends WordSpec with Matchers {
   val namespace = "io.confluent.connect.avro"
-  val schemaGenerator = new AvroSchemaGenerator(namespace)
-
-  def setString(schema: Schema): Schema = {
-    GenericData.setStringType(schema, GenericData.StringType.String)
-    schema
-  }
+  val schemaGenerator = new SchemaGenerator(namespace)
 
   "AvroSchema" should {
     "handle boolean input" in {
-      schemaGenerator.create("ConnectDefault", true) shouldBe Schema.create(Schema.Type.BOOLEAN)
-      schemaGenerator.create("ConnectDefault", false) shouldBe Schema.create(Schema.Type.BOOLEAN)
+      schemaGenerator.create("ConnectDefault", true) shouldBe SchemaBuilder.bool().build()
+      schemaGenerator.create("ConnectDefault", false) shouldBe SchemaBuilder.bool().build()
     }
     "handle char input" in {
-      schemaGenerator.create("ConnectDefault", 'a') shouldBe setString(Schema.create(Schema.Type.STRING))
+      schemaGenerator.create("ConnectDefault", 'a') shouldBe SchemaBuilder.string().build()
     }
     "handle string input" in {
-      schemaGenerator.create("ConnectDefault", "cosmic gate") shouldBe setString(Schema.create(Schema.Type.STRING))
+      schemaGenerator.create("ConnectDefault", "cosmic gate") shouldBe SchemaBuilder.string().build()
     }
     "handle long input" in {
-      schemaGenerator.create("ConnectDefault", 1L) shouldBe Schema.create(Schema.Type.LONG)
+      schemaGenerator.create("ConnectDefault", 1L) shouldBe SchemaBuilder.int64().build()
     }
     "handle float input" in {
-      schemaGenerator.create("ConnectDefault", 34.5f) shouldBe Schema.create(Schema.Type.FLOAT)
+      schemaGenerator.create("ConnectDefault", 34.5f) shouldBe SchemaBuilder.float32().build()
     }
     "handle double input" in {
-      schemaGenerator.create("ConnectDefault", -324.23d) shouldBe Schema.create(Schema.Type.DOUBLE)
+      schemaGenerator.create("ConnectDefault", -324.23d) shouldBe SchemaBuilder.float64().build()
     }
 
     "handle List[int] input" in {
-      schemaGenerator.create("ConnectDefault", Seq(1, 2, 3).asJava) shouldBe Schema.createArray(Schema.create(Schema.Type.INT))
+      schemaGenerator.create("ConnectDefault", Seq(1, 2, 3).asJava) shouldBe SchemaBuilder.array(SchemaBuilder.int32().build()).build()
     }
 
     "handle LinkedHashMap[String,Any] input" in {
@@ -66,13 +59,11 @@ class AvroSchemaGeneratorTest extends WordSpec with Matchers {
       map.put("k1", 1)
       map.put("k2", "minime")
 
-      val expectedSchema = Schema.createRecord("ConnectDefault", null, namespace, false)
-      val default: JsonNode = null
-      val fields = Seq(
-        new Schema.Field("k1", AvroSchemaGenerator.optionalSchema(Schema.Type.INT), null, default),
-        new Schema.Field("k2", AvroSchemaGenerator.optionalSchema(Schema.Type.STRING), null, default)
-      ).asJava
-      expectedSchema.setFields(fields)
+      val builder = SchemaBuilder.struct()
+      builder.name("ConnectDefault")
+      builder.field("k1", SchemaBuilder.int32().build())
+      builder.field("k2", SchemaBuilder.string().build())
+      val expectedSchema = builder.build()
 
       val actualSchema = schemaGenerator.create("ConnectDefault", map)
       actualSchema shouldBe expectedSchema
@@ -119,17 +110,10 @@ class AvroSchemaGeneratorTest extends WordSpec with Matchers {
 
       val actualSchema = schemaGenerator.create("ConnectDefault", map)
 
-      val expectedSchema = new org.apache.avro.Schema.Parser().parse(getClass.getResourceAsStream(s"/person.avsc"))
+      val avroSchema = new org.apache.avro.Schema.Parser().parse(getClass.getResourceAsStream(s"/person.avsc"))
 
-      actualSchema.toString(true) shouldBe expectedSchema.toString(true)
+      val expectedSchema =new AvroData(1).toConnectSchema(avroSchema)
+      actualSchema shouldBe expectedSchema
     }
-  }
-}
-
-object AvroSchemaGeneratorTest {
-  def deserializeAvroRecord(data: Array[Byte], schema: Schema): GenericRecord = {
-    val reader = new GenericDatumReader[GenericRecord](schema)
-    val decoder = DecoderFactory.get().binaryDecoder(data, null)
-    reader.read(null, decoder)
   }
 }

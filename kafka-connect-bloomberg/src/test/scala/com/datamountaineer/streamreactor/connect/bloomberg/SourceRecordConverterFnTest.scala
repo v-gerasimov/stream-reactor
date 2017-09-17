@@ -18,9 +18,7 @@ package com.datamountaineer.streamreactor.connect.bloomberg
 
 import java.util
 
-import com.datamountaineer.streamreactor.connect.bloomberg.avro.AvroSchemaGenerator._
-import org.apache.avro.generic.GenericRecord
-import org.apache.kafka.connect.data.Schema
+import org.apache.kafka.connect.data.{Schema, Struct}
 import org.scalatest.{Matchers, WordSpec}
 
 import scala.collection.JavaConverters._
@@ -110,17 +108,16 @@ class SourceRecordConverterFnTest extends WordSpec with Matchers {
       sourceRecord.key() shouldBe null //for now we don't support it
       sourceRecord.topic() shouldBe kafkaTopic
 
-      sourceRecord.valueSchema() shouldBe Schema.BYTES_SCHEMA
+      sourceRecord.valueSchema().`type`() shouldBe Schema.Type.STRUCT
 
-      val avro = sourceRecord.value().asInstanceOf[Array[Byte]]
-      val genericRecord = AvroDeserializer(avro, data.getSchema)
+      val struct = sourceRecord.value().asInstanceOf[Struct]
 
-      genericRecord.get(BloombergData.SubscriptionFieldKey) shouldBe ticker
-      genericRecord.get("firstName") shouldBe firstName
-      genericRecord.get("lastName") shouldBe lastName
-      genericRecord.get("age") shouldBe age
+      struct.get(BloombergData.SubscriptionFieldKey) shouldBe ticker
+      struct.get("firstName") shouldBe firstName
+      struct.get("lastName") shouldBe lastName
+      struct.get("age") shouldBe age
 
-      val addressRecord = genericRecord.get("address").asInstanceOf[GenericRecord]
+      val addressRecord = struct.get("address").asInstanceOf[Struct]
       addressRecord should not be null
     }
   }

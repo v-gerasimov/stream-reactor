@@ -21,7 +21,7 @@ import java.util.Collections
 
 import com.bloomberglp.blpapi.Element
 import com.datamountaineer.streamreactor.connect.bloomberg.BloombergData._
-import com.datamountaineer.streamreactor.connect.bloomberg.avro.AvroSerializer._
+import Converter._
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.kafka.connect.source.SourceRecord
 
@@ -90,7 +90,7 @@ private[bloomberg] object BloombergData {
       require(kafkaTopic != null && kafkaTopic.trim.nonEmpty, s"$kafkaTopic is not a valid kafka topic.")
       val sourceMap = Collections.singletonMap(BloombergConstants.SUBSCRIPTION_KEY, data.subscriptionKey)
 
-      new SourceRecord(sourceMap, null, kafkaTopic, org.apache.kafka.connect.data.Schema.BYTES_SCHEMA, data.toAvro)
+      new SourceRecord(sourceMap, null, kafkaTopic, org.apache.kafka.connect.data.Schema.BYTES_SCHEMA, data.toStruct)
     }
 
     def toSourceRecord(settings: BloombergSettings): SourceRecord = {
