@@ -16,8 +16,7 @@
 
 package com.datamountaineer.streamreactor.connect.elastic5
 
-import com.datamountaineer.streamreactor.connect.elastic5.config.ElasticSettings
-import com.datamountaineer.streamreactor.connect.elastic5.config.{ElasticConfig, ElasticConfigConstants}
+import com.datamountaineer.streamreactor.connect.elastic5.config.{ElasticConfig, ElasticConfigConstants, ElasticSettings}
 import com.sksamuel.elastic4s.ElasticsearchClientUri
 import org.elasticsearch.common.settings.Settings
 
@@ -37,7 +36,7 @@ object ElasticWriter {
       .builder()
       .put("cluster.name", esClusterName)
       .build()
-    val uri: ElasticsearchClientUri = ElasticsearchClientUri(s"$esPrefix://$hostNames")
+    val uri: ElasticsearchClientUri = ElasticsearchClientUri(s"$esPrefix://$hostNames?cluster.name=$esClusterName")
 
     val settings = ElasticSettings(config)
 
