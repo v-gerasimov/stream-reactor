@@ -151,6 +151,8 @@ class FtpMonitor(settings:FtpMonitorSettings, fileConverter: FileConverter) exte
       ftp.setDefaultTimeout(settings.timeoutMs)
       ftp.setDataTimeout(settings.timeoutMs)
       ftp.setControlKeepAliveTimeout(60)
+      ftp.setBufferSize(102400)
+      ftp.setSendDataSocketBufferSize(102400 * 2)
       ftp.setRemoteVerificationEnabled(false)
       ftp.addProtocolCommandListener(new ProtocolCommandListener {
         override def protocolCommandSent(e: ProtocolCommandEvent): Unit = logger.trace(s">> ${e.getCommand} ${e.getMessage} ${e.getReplyCode} ${e.isCommand} ${e.isReply}")
