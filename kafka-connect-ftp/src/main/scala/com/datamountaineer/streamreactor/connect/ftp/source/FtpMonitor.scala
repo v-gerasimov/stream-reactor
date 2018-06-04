@@ -127,13 +127,13 @@ class FtpMonitor(settings:FtpMonitorSettings, fileConverter: FileConverter) exte
 
 
   // fetches files from a monitored directory when needed
-  def fetchFromMonitoredPlaces(w:MonitoredPath): Stream[(FileMetaData, FileBody)] = {
+  def fetchFromMonitoredPlaces(w:MonitoredPath): List[(FileMetaData, FileBody)] = {
 
     val files = FtpFileLister(ftp).listFiles(w.p.toString).filter(f => !MaxAge.minus(f.age).isNegative && f.name.matches(settings.filter) )
 
     logger.info(s"Found ${files.length} items in ${w.p}")
 
-    files.toStream
+    files.toList
       // Get the metadata from the offset store
       .map(file => (file , fileConverter.getFileOffset(file.path)))
       // Filter out the files that do not need to be fetched
@@ -150,6 +150,7 @@ class FtpMonitor(settings:FtpMonitorSettings, fileConverter: FileConverter) exte
       ftp.setConnectTimeout(settings.timeoutMs)
       ftp.setDefaultTimeout(settings.timeoutMs)
       ftp.setDataTimeout(settings.timeoutMs)
+      ftp.setControlKeepAliveTimeout(60)
       ftp.setRemoteVerificationEnabled(false)
       ftp.addProtocolCommandListener(new ProtocolCommandListener {
         override def protocolCommandSent(e: ProtocolCommandEvent): Unit = logger.trace(s">> ${e.getCommand} ${e.getMessage} ${e.getReplyCode} ${e.isCommand} ${e.isReply}")
@@ -184,11 +185,13 @@ class FtpMonitor(settings:FtpMonitorSettings, fileConverter: FileConverter) exte
     Success(ftp)
   }
 
-  def poll(): Try[Stream[(FileMetaData, FileBody, MonitoredPath)]] = connectFtp() match {
+  def poll(): Try[List[(FileMetaData, FileBody, MonitoredPath)]] = {
+    connectFtp() match {
       case Success(_) =>
-        Try(settings.directories.toStream.flatMap(dir =>
+        Try(settings.directories.toList.flatMap(dir =>
           fetchFromMonitoredPlaces(dir).map { case (meta, body) => (meta, body, dir) }))
       case Failure(err) => logger.warn(s"cannot connect to ftp: ${err.toString}")
         Failure(err)
     }
+  }
 }
