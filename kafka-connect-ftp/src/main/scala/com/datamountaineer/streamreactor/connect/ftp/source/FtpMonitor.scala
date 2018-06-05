@@ -42,8 +42,18 @@ case class FileBody(bytes:Array[Byte], offset:Long)
 object EmptyFileBody extends FileBody(Array[Byte](), 0)
 
 // instructs the FtpMonitor how to do its things
-case class FtpMonitorSettings(host:String, port:Option[Int], user:String, pass:String, maxAge: Option[Duration],
-                              directories: Seq[MonitoredPath], timeoutMs:Int, protocol: FtpProtocol, filter:String)
+case class FtpMonitorSettings(host: String,
+                              port: Option[Int],
+                              user: String,
+                              pass: String,
+                              maxAge: Option[Duration],
+                              directories: Seq[MonitoredPath],
+                              timeoutMs: Int,
+                              protocol: FtpProtocol,
+                              filter: String,
+                              bufferSize : Int,
+                              socketBufferSize: Int
+                             )
 
 class FtpMonitor(settings:FtpMonitorSettings, fileConverter: FileConverter) extends StrictLogging {
   val MaxAge = settings.maxAge.getOrElse(Duration.ofDays(Long.MaxValue))
@@ -68,7 +78,7 @@ class FtpMonitor(settings:FtpMonitorSettings, fileConverter: FileConverter) exte
 
   // Retrieves the FtpAbsoluteFile and returns a new or updated KnownFile
   def fetch(file: AbsoluteFtpFile, prevFetch: Option[FileMetaData]): Option[(Option[FileMetaData], FetchedFile)] = {
-    logger.info(s"fetching ${file.path}")
+    logger.info(s"Fetching ${file.path}")
     val baos = new ByteArrayOutputStream()
 
     if (ftp.retrieveFile(file.path, baos)) {
@@ -82,7 +92,7 @@ class FtpMonitor(settings:FtpMonitorSettings, fileConverter: FileConverter) exte
       }
       Option(prevFetch, FetchedFile(meta, bytes))
     } else {
-      logger.warn(s"failed to fetch ${file.path}: ${ftp.getReplyString}")
+      logger.warn(s"Failed to fetch ${file.path}: ${ftp.getReplyString}")
       None
     }
   }
@@ -92,36 +102,36 @@ class FtpMonitor(settings:FtpMonitorSettings, fileConverter: FileConverter) exte
     prevFetch match {
       case Some(previously) if previously.attribs.size != current.meta.attribs.size || previously.hash != current.meta.hash =>
         // file changed in size and/or hash
-        logger.info(s"fetched ${current.meta.attribs.path}, it was known before and it changed")
+        logger.info(s"Fetched ${current.meta.attribs.path}, it was known before and it changed")
         if (tail) {
           if (current.meta.attribs.size > previously.attribs.size) {
             val hashPrevBlock = DigestUtils.sha256Hex(util.Arrays.copyOfRange(current.body, 0, previously.attribs.size.toInt))
             if (previously.hash == hashPrevBlock) {
-              logger.info(s"tail ${current.meta.attribs.path} [${previously.attribs.size.toInt}, ${current.meta.attribs.size.toInt})")
+              logger.info(s"Tail ${current.meta.attribs.path} [${previously.attribs.size.toInt}, ${current.meta.attribs.size.toInt})")
               val tail = util.Arrays.copyOfRange(current.body, previously.attribs.size.toInt, current.meta.attribs.size.toInt)
               (current.meta.inspectedNow().modifiedNow(), FileBody(tail, previously.attribs.size))
             } else {
-              logger.warn(s"the tail of ${current.meta.attribs.path} is to be followed, but previously seen content changed. we'll provide the entire file.")
+              logger.warn(s"The tail of ${current.meta.attribs.path} is to be followed, but previously seen content changed. we'll provide the entire file.")
               (current.meta.inspectedNow().modifiedNow(), FileBody(current.body, 0))
             }
           } else {
             // the file shrunk or didn't grow
-            logger.warn(s"the tail of ${current.meta.attribs.path} is to be followed, but it shrunk")
+            logger.warn(s"The tail of ${current.meta.attribs.path} is to be followed, but it shrunk")
             (current.meta.inspectedNow().modifiedNow(), EmptyFileBody)
           }
         } else {
           // !tail: we're not tailing but dumping the entire file on change
-          logger.info(s"dump entire ${current.meta.attribs.path}")
+          logger.info(s"Dump entire ${current.meta.attribs.path}")
           (current.meta.inspectedNow().modifiedNow(), FileBody(current.body, 0))
         }
       case Some(_) =>
         // file didn't change
-        logger.info(s"fetched ${current.meta.attribs.path}, it was known before and it didn't change")
+        logger.info(s"Fetched ${current.meta.attribs.path}, it was known before and it didn't change")
         (current.meta.inspectedNow(), EmptyFileBody)
       case None =>
         // file is new
-        logger.info(s"fetched ${current.meta.attribs.path}, wasn't known before")
-        logger.info(s"dump entire ${current.meta.attribs.path}")
+        logger.info(s"Fetched ${current.meta.attribs.path}, wasn't known before")
+        logger.info(s"Dumping entire ${current.meta.attribs.path}")
         (current.meta.inspectedNow().modifiedNow(), FileBody(current.body, 0))
     }
 
@@ -151,8 +161,16 @@ class FtpMonitor(settings:FtpMonitorSettings, fileConverter: FileConverter) exte
       ftp.setDefaultTimeout(settings.timeoutMs)
       ftp.setDataTimeout(settings.timeoutMs)
       ftp.setControlKeepAliveTimeout(60)
-      ftp.setBufferSize(102400)
-      ftp.setSendDataSocketBufferSize(102400 * 2)
+      ftp.setControlKeepAliveReplyTimeout(60)
+
+      if (ftp.getBufferSize < settings.bufferSize) {
+        ftp.setBufferSize(settings.bufferSize)
+      }
+
+      if (ftp.getSendDataSocketBufferSize < settings.socketBufferSize) {
+        ftp.setSendDataSocketBufferSize(settings.socketBufferSize)
+      }
+
       ftp.setRemoteVerificationEnabled(false)
       ftp.addProtocolCommandListener(new ProtocolCommandListener {
         override def protocolCommandSent(e: ProtocolCommandEvent): Unit = logger.trace(s">> ${e.getCommand} ${e.getMessage} ${e.getReplyCode} ${e.isCommand} ${e.isReply}")
@@ -161,26 +179,25 @@ class FtpMonitor(settings:FtpMonitorSettings, fileConverter: FileConverter) exte
       }
       )
 
-      logger.info(s"connect ${settings.host}:${settings.port}")
+      logger.info(s"Connect ${settings.host}:${settings.port}")
       settings.port match {
         case Some(explicitPort) => ftp.connect(settings.host, explicitPort)
         case None => ftp.connect(settings.host)
       }
       if (!FTPReply.isPositiveCompletion(ftp.getReplyCode)) {
         ftp.disconnect()
-        return Failure(new Exception(s"cannot connect to ftp: ${ftp.getReplyCode}: ${ftp.getReplyString}"))
+        return Failure(new Exception(s"Cannot connect to ftp: ${ftp.getReplyCode}: ${ftp.getReplyString}"))
       }
       ftp.login(settings.user, settings.pass)
       if (!FTPReply.isPositiveCompletion(ftp.getReplyCode)) {
         ftp.disconnect()
-        return Failure(new Exception(s"cannot login to ftp: ${ftp.getReplyCode}: ${ftp.getReplyString}"))
+        return Failure(new Exception(s"Cannot login to ftp: ${ftp.getReplyCode}: ${ftp.getReplyString}"))
       }
       if (!ftp.isConnected) {
-        return Failure(new Exception("cannot connect to ftp because of some unreported error"))
+        return Failure(new Exception("Cannot connect to ftp because of some unreported error"))
       }
-      logger.info("successfully connected to the ftp server and logged in")
+      logger.info("Successfully connected to the ftp server and logged in")
       ftp.enterLocalPassiveMode()
-      logger.info("passive we are")
       ftp.setFileType(FTP.BINARY_FILE_TYPE)
       ftp.setControlKeepAliveTimeout(15) //send NOOP every [seconds]
     }

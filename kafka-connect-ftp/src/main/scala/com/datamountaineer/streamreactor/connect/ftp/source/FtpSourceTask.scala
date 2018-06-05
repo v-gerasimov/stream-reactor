@@ -59,7 +59,9 @@ class FtpSourcePoller(cfg: FtpSourceConfig, offsetStorage: OffsetStorageReader) 
       monitor2topic.keys.toSeq,
       cfg.timeoutMs(),
       cfg.getProtocol,
-      cfg.getString(FtpSourceConfig.fileFilter)
+      cfg.getString(FtpSourceConfig.fileFilter),
+      cfg.getInt(FtpSourceConfig.bufferSize),
+      cfg.getInt(FtpSourceConfig.socketSendBufferSize)
     ),
       fileConverter
     )
@@ -74,18 +76,17 @@ class FtpSourcePoller(cfg: FtpSourceConfig, offsetStorage: OffsetStorageReader) 
 
   def fetchRecords(): List[SourceRecord] = {
     if (backoff.passed) {
-      logger.info("poll")
       ftpMonitor.poll() match {
         case Success(fileChanges) =>
           backoff = backoff.nextSuccess
           fileChanges.flatMap({ case (meta, body, w) =>
-            logger.info(s"got some fileChanges: ${meta.attribs.path}")
+            logger.info(s"Changes detected, fileChanges: ${meta.attribs.path}")
             fileConverter.convert(monitor2topic(w), meta, body)
           })
         case Failure(err) =>
-          logger.warn(s"ftp monitor failed: $err", err)
+          logger.warn(s"Ftp monitor failed: $err", err)
           backoff = backoff.nextFailure
-          logger.info(s"let's backoff ${backoff.remaining}")
+          logger.info(s"Backing of for ${backoff.remaining}")
           List.empty
       }
     } else {
@@ -100,7 +101,7 @@ class FtpSourceTask extends SourceTask with StrictLogging {
   private val manifest = JarManifest(getClass.getProtectionDomain.getCodeSource.getLocation)
 
   override def stop(): Unit = {
-    logger.info("stop")
+    logger.info("Stop FTP connector")
     poller = None
   }
 

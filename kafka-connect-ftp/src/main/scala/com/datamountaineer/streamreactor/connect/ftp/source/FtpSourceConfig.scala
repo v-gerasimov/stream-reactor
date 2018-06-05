@@ -55,6 +55,8 @@ object FtpSourceConfig {
   val FtpMaxPollRecords = "connect.ftp.max.poll.records"
   val protocol = "connect.ftp.protocol"
   val fileFilter = "connect.ftp.filter"
+  val bufferSize = "connect.ftp.buffer.size"
+  val socketSendBufferSize = "connect.ftp.socket.buffer.size"
 
   val definition: ConfigDef = new ConfigDef()
     .define(Address, Type.STRING, Importance.HIGH, "ftp address[:port]")
@@ -71,6 +73,8 @@ object FtpSourceConfig {
     .define(FtpMaxPollRecords, Type.INT, 10000, Importance.LOW, "Max number of records returned per poll")
     .define(protocol, Type.STRING, "ftp", Importance.LOW, "FTPS or FTP protocol")
     .define(fileFilter, Type.STRING, ".*", Importance.LOW, "Regular expression to use when selecting files for processing ignoring file which do not match")
+    .define(bufferSize, Type.INT, 102400, Importance.MEDIUM, "The internal buffer size")
+    .define(socketSendBufferSize, Type.INT, 102400 * 2, Importance.MEDIUM, "The SO_SNDBUF buffer size")
 }
 
 // abstracts the properties away a bit

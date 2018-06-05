@@ -46,10 +46,10 @@ class ConnectFileMetaDataStore(offsetStorage: OffsetStorageReader) extends FileM
   def getFromStorage(path: String): Option[FileMetaData] =
     offsetStorage.offset(Map("path" -> path).asJava) match {
       case null =>
-        logger.info(s"meta store storage HASN'T ${path}")
+        logger.info(s"Meta store storage HASN'T ${path}")
         None
       case o =>
-        logger.info(s"meta store storage has ${path}")
+        logger.info(s"Meta store storage has ${path}")
         Some(connectOffsetToFileMetas(path, o))
     }
 
