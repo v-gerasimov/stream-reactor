@@ -57,6 +57,10 @@ A collection of components to build a real time ingestion pipeline.
 
 ## Release Notes
 
+**1.2.0 PENDING**
+
+*  FTP added connect.ftp.buffer.size and connect.ftp.socket.buffer.size options
+
 **1.1.0**
 
 *   Upgrade to Kafka 1.1.0

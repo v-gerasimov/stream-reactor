@@ -45,7 +45,7 @@ class FtpSourcePoller(cfg: FtpSourceConfig, offsetStorage: OffsetStorageReader) 
   val maxBackoff = Duration.parse(cfg.getString(FtpSourceConfig.MaxBackoff))
 
   var backoff = new ExponentialBackOff(pollDuration, maxBackoff)
-  var buffer = List.empty[SourceRecord]
+  var buffer : Stream[SourceRecord] = Empty
 
   val ftpMonitor = {
     val (host,optPort) = cfg.address
@@ -67,14 +67,14 @@ class FtpSourcePoller(cfg: FtpSourceConfig, offsetStorage: OffsetStorageReader) 
     )
   }
 
-  def poll(): List[SourceRecord] = {
+  def poll(): Stream[SourceRecord] = {
     val stream = if (buffer.isEmpty) fetchRecords() else buffer
     val (head, tail) = stream.splitAt(cfg.maxPollRecords)
     buffer = tail
     head
   }
 
-  def fetchRecords(): List[SourceRecord] = {
+  def fetchRecords(): Stream[SourceRecord] = {
     if (backoff.passed) {
       ftpMonitor.poll() match {
         case Success(fileChanges) =>
@@ -87,11 +87,11 @@ class FtpSourcePoller(cfg: FtpSourceConfig, offsetStorage: OffsetStorageReader) 
           logger.warn(s"Ftp monitor failed: $err", err)
           backoff = backoff.nextFailure
           logger.info(s"Backing of for ${backoff.remaining}")
-          List.empty
+          Empty
       }
     } else {
       Thread.sleep(1000)
-      List.empty
+      Empty
     }
   }
 }
