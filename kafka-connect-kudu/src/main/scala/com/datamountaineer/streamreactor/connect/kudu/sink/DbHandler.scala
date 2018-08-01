@@ -29,7 +29,7 @@ import org.apache.kafka.connect.errors.ConnectException
 import org.apache.kudu.client.{KuduClient, KuduTable}
 import org.apache.kudu.ColumnSchema
 import org.apache.kudu.client._
-import org.codehaus.jackson.JsonNode
+import org.json4s.JsonAST.JValue
 
 import scala.collection.JavaConversions._
 import scala.util.{Failure, Success, Try}
@@ -38,9 +38,7 @@ import scala.util.{Failure, Success, Try}
   * Created by andrew@datamountaineer.com on 06/06/16. 
   * stream-reactor-maven
   */
-
 case class CreateTableProps(name: String, schema: kuduSchema, cto: CreateTableOptions)
-
 
 object DbHandler extends StrictLogging with KuduConverter {
 
@@ -80,7 +78,6 @@ object DbHandler extends StrictLogging with KuduConverter {
     checkTables(client, settings)
     settings.kcql.map(s => (s.getSource, client.openTable(s.getTarget))).toMap
   }
-
 
   /**
     * Creates tables in Kudu
@@ -186,7 +183,7 @@ object DbHandler extends StrictLogging with KuduConverter {
       val fieldName = f.name()
       val alias = if (mappingFields.contains(fieldName)) mappingFields(fieldName) else fieldName
       val col = fromAvro(f.schema(), alias)
-      val default = if (f.defaultValue() != JsonProperties.NULL_VALUE) f.defaultValue() else null
+      val default = if (f.defaultVal() != JsonProperties.NULL_VALUE) f.defaultVal() else null
 
       if (pks.contains(alias)) {
         logger.info(s"Setting PK on ${f.name()} for ${kcql.getTarget}")
@@ -220,6 +217,24 @@ object DbHandler extends StrictLogging with KuduConverter {
   }
 
   /**
+    * Alter a Kudu table, new columns only
+    *
+    * @param table   The table to alter
+    * @param old     The old json fields
+    * @param current The current json fields
+    * @param client  A Kudu client to execute the DDL
+    **/
+  def alterTable(table: String,
+                 old: Map[String, JValue],
+                 current: Map[String, JValue],
+                 client: KuduClient): KuduTable = {
+
+    val ato = compare(old, current)
+    ato.foreach(a => executeAlterTable(a, table, client))
+    client.openTable(table)
+  }
+
+  /**
     * Compare two connect schemas and return a Kudu AlterTableOptions list
     *
     * @param old     The old schema
@@ -244,7 +259,28 @@ object DbHandler extends StrictLogging with KuduConverter {
   }
 
   /**
-    * Execute a Alter table DDL
+    * Compare two json payloads and return a Kudu AlterTableOptions list
+    *
+    * @param old     The old json fields
+    * @param current The current json fields
+    * @return A list of AlterTableOptions
+    **/
+  def compare(old: Map[String, JValue], current: Map[String, JValue]): List[AlterTableOptions] = {
+
+    logger.info("Found a difference in the schemas.")
+    val diff = current.keySet.diff(old.keySet)
+    diff.map {  d =>
+      val schema = convertJsonToColumnSchema((d, current(d)))
+      val ato = new AlterTableOptions()
+
+      logger.info(s"Adding column ${schema.getName}, type ${schema.getType}, default ${schema.getDefaultValue}")
+      ato.addColumn(schema.getName, schema.getType, schema.getDefaultValue)
+
+    }.toList
+  }
+
+  /**
+    * Execute an Alter table DDL
     *
     * @param ato    The kudu alter table options
     * @param target The name of the table to create
@@ -271,6 +307,17 @@ object DbHandler extends StrictLogging with KuduConverter {
     }
   }
 
+  def createTableFromJsonPayload(kcql: Kcql, payload: JValue, client: KuduClient, topic: String): Try[KuduTable] = {
+    if (kcql.isAutoCreate) {
+      val cto = getCreateTableOptions(kcql)
+      val kuduSchema = convertToKuduSchemaFromJson(payload, topic)
+      val ctp = CreateTableProps(kcql.getTarget, kuduSchema, cto)
+      Success(executeCreateTable(ctp, client))
+    } else {
+      Failure(new ConnectException(s"Mapping ${kcql.toString} not configured for Auto table creation"))
+    }
+  }
+
   /**
     * Execute a Create table DDL
     *
@@ -285,13 +332,16 @@ object DbHandler extends StrictLogging with KuduConverter {
   }
 
   /**
-    * Create a Kudu CreateTableOptions default to hash partition for now
+    * Create a Kudu CreateTableOptions to set the proper partition scheme.  If the table definition
+    * contains a `DISTRIBUTEBY {field} INTO {N} BUCKETS` specification, it will generate a series
+    * of N hash partitions on the specified field, and no range partition.
     *
     * @param config The mapping config
-    * @return a CreateTableConfig
+    * @return a CreateTableOptions
     **/
   private def getCreateTableOptions(config: Kcql): CreateTableOptions = {
     new CreateTableOptions()
       .addHashPartitions(config.getBucketing.getBucketNames.toList, config.getBucketing.getBucketsNumber)
+      .setRangePartitionColumns(List.empty[String])
   }
 }
